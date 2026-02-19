@@ -1,0 +1,88 @@
+#!/bin/bash
+# vssh — SSH wrapper that fetches private keys from HashiCorp Vault
+# Keys are loaded into ssh-agent memory and never written to disk.
+#
+# Usage: vssh <host-alias> [extra ssh args...]
+#
+# All configuration lives in ~/.ssh/config:
+#   Global (top of file):
+#     # vssh:vault_addr https://vault.example.com
+#     # vssh:default_vault_key secret/ssh/default-key
+#   Per-host (inside Host block):
+#     # vssh:vault_path secret/ssh/some-key
+
+set -e
+
+SSH_CONFIG="$HOME/.ssh/config"
+
+# Read global vssh settings from SSH config (tr -d '\r' handles CRLF on Windows)
+VAULT_ADDR="${VAULT_ADDR:-$(tr -d '\r' < "$SSH_CONFIG" | grep -m1 '^# vssh:vault_addr ' | awk '{print $3}')}"
+DEFAULT_VAULT_KEY=$(tr -d '\r' < "$SSH_CONFIG" | grep -m1 '^# vssh:default_vault_key ' | awk '{print $3}')
+export VAULT_ADDR
+
+if [ -z "$VAULT_ADDR" ]; then
+    echo "Error: VAULT_ADDR is not set"
+    echo "Set it via environment variable or add '# vssh:vault_addr <url>' to $SSH_CONFIG"
+    exit 1
+fi
+
+if [ -z "$1" ]; then
+    echo "Usage: vssh <host> [ssh args...]"
+    echo ""
+    echo "Available hosts:"
+    grep "^Host " "$SSH_CONFIG" | awk '{print "  " $2}'
+    exit 1
+fi
+
+HOST="$1"
+shift
+
+# Extract per-host vssh:vault_path from SSH config
+get_host_vault_path() {
+    local host="$1" in_host=0
+    while IFS= read -r line; do
+        if [[ "$line" =~ ^Host[[:space:]]+(.*) ]]; then
+            local hosts="${BASH_REMATCH[1]}"
+            in_host=0
+            for h in $hosts; do
+                [[ "$h" == "$host" ]] && in_host=1
+            done
+        elif [[ $in_host -eq 1 && "$line" =~ ^[[:space:]]*#[[:space:]]*vssh:vault_path[[:space:]]+(.*) ]]; then
+            echo "${BASH_REMATCH[1]}"
+            return 0
+        fi
+    done < <(tr -d '\r' < "$SSH_CONFIG")
+    return 1
+}
+
+VAULT_PATH=$(get_host_vault_path "$HOST") || VAULT_PATH="$DEFAULT_VAULT_KEY"
+
+if [ -z "$VAULT_PATH" ]; then
+    echo "Error: No vault path for host '$HOST' and no default_vault_key set"
+    echo "Add '# vssh:vault_path <path>' to the Host block or '# vssh:default_vault_key <path>' at the top of $SSH_CONFIG"
+    exit 1
+fi
+
+echo "Fetching key from Vault: $VAULT_PATH"
+
+# Start a temporary ssh-agent (key stays in RAM only)
+eval "$(ssh-agent -s)" > /dev/null
+
+# Cleanup: kill the temporary agent on exit
+cleanup() {
+    ssh-agent -k > /dev/null 2>&1
+}
+trap cleanup EXIT
+
+# Fetch key from Vault and load directly into agent via pipe (never touches disk)
+if ! vault kv get -field=private_key "$VAULT_PATH" 2>/dev/null | ssh-add - 2>/dev/null; then
+    echo "Error: Failed to fetch key from Vault path '$VAULT_PATH'"
+    echo "Make sure you are logged in: vault login"
+    exit 1
+fi
+
+echo "Connecting to $HOST..."
+
+# Run SSH — the agent provides the key, no files needed
+ssh -o StrictHostKeyChecking=accept-new \
+    "$HOST" "$@"

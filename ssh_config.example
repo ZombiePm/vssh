@@ -1,0 +1,33 @@
+# =============================================================================
+# vssh global settings
+# =============================================================================
+# vssh:vault_addr https://vault.example.com
+# vssh:default_vault_key secret/ssh/default-key
+
+# =============================================================================
+# Hosts using the default Vault key (secret/ssh/default-key)
+# =============================================================================
+
+Host web-server
+    HostName 203.0.113.10
+    User deploy
+
+Host db-server
+    HostName 203.0.113.20
+    User admin
+    Port 2222
+
+# =============================================================================
+# Hosts with a custom Vault key
+# =============================================================================
+
+Host staging
+    HostName 198.51.100.50
+    User root
+    Port 32222
+    # vssh:vault_path secret/ssh/staging-key
+
+Host production
+    HostName 198.51.100.100
+    User deploy
+    # vssh:vault_path secret/ssh/prod-key
