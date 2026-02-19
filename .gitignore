@@ -1,0 +1,8 @@
+*.pem
+*.ppk
+*.key
+id_rsa
+id_ed25519
+id_ecdsa
+.env
+.vault-token
