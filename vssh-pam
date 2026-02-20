@@ -1,0 +1,4 @@
+#!/bin/bash
+# vssh-pam — SSH through PAM tunnel with auto TOTP
+# Usage: vssh-pam <host> | list | init | vault
+exec python "$(dirname "$(readlink -f "$0" 2>/dev/null || echo "$0")")/vssh-pam.py" "$@"
