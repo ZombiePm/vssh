@@ -9,7 +9,7 @@
 Usage:
   vssh-pam <name>         Подключиться к серверу (fuzzy match)
   vssh-pam list           Список серверов
-  vssh-pam init           Импорт .env + CSV → Vault
+  vssh-pam init           Импорт .env → Vault
   vssh-pam vault          Показать содержимое Vault (пароли замаскированы)
 """
 
@@ -376,12 +376,12 @@ def cmd_vault(args):
 
 
 def cmd_init(args):
-    """Импортировать секреты из .env и CSV в Vault."""
+    """Импортировать секреты из .env в Vault."""
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    cppk_dir = os.environ.get("VSSH_PAM_IMPORT_DIR", script_dir)
+    import_dir = os.environ.get("VSSH_PAM_IMPORT_DIR", script_dir)
 
     # 1. Загрузить .env
-    env_path = os.path.join(cppk_dir, ".env")
+    env_path = os.path.join(import_dir, ".env")
     env = {}
     if os.path.exists(env_path):
         print(f"Читаю {env_path}...")
@@ -396,7 +396,8 @@ def cmd_init(args):
                     v = v[1:-1]
                 env[k.strip()] = v
     else:
-        print(f"Файл {env_path} не найден, пропускаю")
+        print(f"Файл {env_path} не найден")
+        sys.exit(1)
 
     # 2. Записать config
     config_fields = {}
@@ -424,42 +425,6 @@ def cmd_init(args):
         else:
             print("  OK")
 
-    # 4. Загрузить серверы из CSV
-    csv_path = os.path.join(cppk_dir, "credentials.csv")
-    servers = []
-    if os.path.exists(csv_path):
-        print(f"Читаю {csv_path}...")
-        with open(csv_path, encoding="utf-8") as f:
-            for i, line in enumerate(f):
-                if i == 0:
-                    continue  # skip header
-                line = line.strip()
-                if not line:
-                    continue
-                parts = line.split(";")
-                if len(parts) >= 4:
-                    hostname = parts[0].strip('"')
-                    ip = parts[1].strip('"')
-                    login = parts[2].strip('"')
-                    password = parts[3].strip('"')
-                    servers.append({
-                        "hostname": hostname,
-                        "ip": ip,
-                        "login": login,
-                        "password": password,
-                    })
-        print(f"  Найдено серверов: {len(servers)}")
-    else:
-        print(f"Файл {csv_path} не найден, пропускаю")
-
-    if servers:
-        print("Записываю secret/pam/servers...")
-        servers_json = json.dumps(servers, ensure_ascii=False)
-        if not vault_put("secret/pam/servers", {"servers": servers_json}):
-            print("  ОШИБКА записи!")
-        else:
-            print(f"  OK ({len(servers)} серверов)")
-
     print("\nГотово! Проверьте: vssh-pam vault")
 
 
@@ -469,7 +434,7 @@ def usage():
     print("Команды:")
     print("  vssh-pam <name>     Подключиться к серверу (fuzzy match)")
     print("  vssh-pam list       Список серверов")
-    print("  vssh-pam init       Импорт .env + CSV → Vault")
+    print("  vssh-pam init       Импорт .env → Vault")
     print("  vssh-pam vault      Показать содержимое Vault")
     sys.exit(0)
 

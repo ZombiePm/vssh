@@ -28,7 +28,7 @@ Python wrapper for SSH through a PAM-authenticated tunnel with automatic TOTP ge
 ```
 vssh-pam <hostname>     # Connect (fuzzy match)
 vssh-pam list           # List available servers
-vssh-pam init           # Import .env + CSV into Vault
+vssh-pam init           # Import .env into Vault
 vssh-pam vault          # Show Vault contents (passwords masked)
 ```
 
