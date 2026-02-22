@@ -60,7 +60,7 @@ get_host_vault_path() {
 VSSH_DIR="$(cd "$(dirname "$0")" && pwd)"
 add_to_pageant() {
     local key_data="$1"
-    if ! python "$VSSH_DIR/vssh-pageant.py" <<< "$key_data" 2>/dev/null; then
+    if ! printf '%s\n' "$key_data" | python "$VSSH_DIR/vssh-pageant.py" 2>/dev/null; then
         echo "Warning: Failed to add key to Pageant"
         return 1
     fi
