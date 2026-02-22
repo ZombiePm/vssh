@@ -104,14 +104,37 @@ try {
     # Fix permissions: only current user with full control
     icacls $tmpKey /inheritance:r /grant:r "${env:USERNAME}:(F)" 2>$null | Out-Null
 
-    # Add key to Pageant via SSH agent protocol
+    # Add ALL keys to Pageant via SSH agent protocol
     $scriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Definition }
     $pageantHelper = Join-Path $scriptDir "vssh-pageant.py"
     if (Test-Path $pageantHelper) {
+        # Collect all unique vault paths from SSH config
+        $allVaultPaths = @()
+        $inHost = $false
+        foreach ($cfgLine in $sshConfigLines) {
+            if ($cfgLine -match '^Host\s+') { $inHost = $true }
+            elseif ($inHost -and $cfgLine -match '^\s*#\s*vssh:vault_path\s+(\S+)') {
+                $vp = $Matches[1]
+                if ($allVaultPaths -notcontains $vp) { $allVaultPaths += $vp }
+            }
+        }
+        if ($defaultVaultKey -and $allVaultPaths -notcontains $defaultVaultKey) {
+            $allVaultPaths += $defaultVaultKey
+        }
+
+        Write-Host "Loading all keys into Pageant..."
         $prevEAP = $ErrorActionPreference; $ErrorActionPreference = "Continue"
-        $pageantOut = $keyText | python $pageantHelper 2>&1
+        foreach ($vp in $allVaultPaths) {
+            $kd = vault kv get -field=private_key $vp 2>$null
+            if ($LASTEXITCODE -eq 0 -and $kd) {
+                $kt = ($kd -join "`n") + "`n"
+                $pOut = $kt | python $pageantHelper 2>&1
+                if ($pOut -match "added|already") { Write-Host "  $vp : $pOut" }
+            } else {
+                Write-Host "  Warning: Failed to fetch $vp"
+            }
+        }
         $ErrorActionPreference = $prevEAP
-        if ($pageantOut -match "added|already") { Write-Host $pageantOut }
     }
 
     Write-Host "Connecting to $Host_..."

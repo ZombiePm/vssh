@@ -66,6 +66,44 @@ add_to_pageant() {
     fi
 }
 
+# Collect all unique vault paths from SSH config
+get_all_vault_paths() {
+    local paths=()
+    local in_host=0 current_path=""
+    while IFS= read -r line; do
+        if [[ "$line" =~ ^Host[[:space:]] ]]; then
+            in_host=1
+            current_path=""
+        elif [[ $in_host -eq 1 && "$line" =~ ^[[:space:]]*#[[:space:]]*vssh:vault_path[[:space:]]+(.*) ]]; then
+            current_path="${BASH_REMATCH[1]}"
+            # Add if not already in list
+            local found=0
+            for p in "${paths[@]}"; do [[ "$p" == "$current_path" ]] && found=1; done
+            [[ $found -eq 0 ]] && paths+=("$current_path")
+        fi
+    done < <(tr -d '\r' < "$SSH_CONFIG")
+    # Add default key if set and not already listed
+    if [ -n "$DEFAULT_VAULT_KEY" ]; then
+        local found=0
+        for p in "${paths[@]}"; do [[ "$p" == "$DEFAULT_VAULT_KEY" ]] && found=1; done
+        [[ $found -eq 0 ]] && paths+=("$DEFAULT_VAULT_KEY")
+    fi
+    printf '%s\n' "${paths[@]}"
+}
+
+# Load all SSH keys into Pageant
+load_all_pageant_keys() {
+    local paths
+    mapfile -t paths < <(get_all_vault_paths)
+    if [ ${#paths[@]} -eq 0 ]; then return; fi
+    echo "Loading all keys into Pageant..."
+    for vp in "${paths[@]}"; do
+        local kd
+        kd=$(vault kv get -field=private_key "$vp" 2>/dev/null) || { echo "  Warning: Failed to fetch $vp"; continue; }
+        printf '%s\n' "$kd" | python "$VSSH_DIR/vssh-pageant.py" 2>/dev/null
+    done
+}
+
 VAULT_PATH=$(get_host_vault_path "$HOST") || VAULT_PATH="$DEFAULT_VAULT_KEY"
 
 if [ -z "$VAULT_PATH" ]; then
@@ -98,8 +136,8 @@ printf '%s\n' "$KEY_DATA" | ssh-add - 2>/dev/null || {
     exit 1
 }
 
-# Add key to Pageant (PuTTY agent) — key persists in Pageant after vssh exits
-add_to_pageant "$KEY_DATA" || true
+# Add all keys to Pageant (PuTTY agent) — keys persist in Pageant after vssh exits
+load_all_pageant_keys || true
 
 # Clear key from shell memory
 unset KEY_DATA
