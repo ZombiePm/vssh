@@ -99,7 +99,7 @@ Server entry format:
 
 ```bash
 # Clone
-git clone https://github.com/aeve-co/vssh.git
+git clone https://github.com/ZombiePm/vssh.git
 
 # Add to PATH (e.g. copy to ~/bin or symlink)
 cp vssh vssh-pam vssh-pam.py vssh-pageant.py ~/bin/
