@@ -100,7 +100,7 @@ load_all_pageant_keys() {
     for vp in "${paths[@]}"; do
         local kd
         kd=$(vault kv get -field=private_key "$vp" 2>/dev/null) || { echo "  Warning: Failed to fetch $vp"; continue; }
-        printf '%s\n' "$kd" | python "$VSSH_DIR/vssh-pageant.py" 2>/dev/null
+        printf '%s\n' "$kd" | python "$VSSH_DIR/vssh-pageant.py" "$vp" 2>/dev/null
     done
 }
 

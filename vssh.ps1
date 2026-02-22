@@ -128,7 +128,7 @@ try {
             $kd = vault kv get -field=private_key $vp 2>$null
             if ($LASTEXITCODE -eq 0 -and $kd) {
                 $kt = ($kd -join "`n") + "`n"
-                $pOut = $kt | python $pageantHelper 2>&1
+                $pOut = $kt | python $pageantHelper $vp 2>&1
                 if ($pOut -match "added|already") { Write-Host "  $vp : $pOut" }
             } else {
                 Write-Host "  Warning: Failed to fetch $vp"

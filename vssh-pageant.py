@@ -104,7 +104,8 @@ def main():
             print("Key already in Pageant")
             return 0
 
-        msg = build_add_message(key)
+        comment = sys.argv[1].rsplit("/", 1)[-1] if len(sys.argv) > 1 else "vssh"
+        msg = build_add_message(key, comment=comment)
         if msg is None:
             print(f"Unsupported key type: {key.get_name()}", file=sys.stderr)
             return 1
