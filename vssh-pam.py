@@ -378,7 +378,7 @@ def cmd_vault(args):
 def cmd_init(args):
     """Импортировать секреты из .env и CSV в Vault."""
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    cppk_dir = os.path.join("REDACTED", os.sep, "REDACTED", "REDACTED")
+    cppk_dir = os.environ.get("VSSH_PAM_IMPORT_DIR", script_dir)
 
     # 1. Загрузить .env
     env_path = os.path.join(cppk_dir, ".env")

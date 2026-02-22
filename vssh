@@ -1,6 +1,7 @@
 #!/bin/bash
 # vssh — SSH wrapper that fetches private keys from HashiCorp Vault
 # Keys are loaded into ssh-agent memory and never written to disk.
+# On Windows, keys are also automatically added to Pageant (PuTTY agent).
 #
 # Usage: vssh <host-alias> [extra ssh args...]
 #
@@ -55,6 +56,16 @@ get_host_vault_path() {
     return 1
 }
 
+# Add key to Pageant via SSH agent protocol (no temp files, no puttygen)
+VSSH_DIR="$(cd "$(dirname "$0")" && pwd)"
+add_to_pageant() {
+    local key_data="$1"
+    if ! python "$VSSH_DIR/vssh-pageant.py" <<< "$key_data" 2>/dev/null; then
+        echo "Warning: Failed to add key to Pageant"
+        return 1
+    fi
+}
+
 VAULT_PATH=$(get_host_vault_path "$HOST") || VAULT_PATH="$DEFAULT_VAULT_KEY"
 
 if [ -z "$VAULT_PATH" ]; then
@@ -74,12 +85,24 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# Fetch key from Vault and load directly into agent via pipe (never touches disk)
-if ! vault kv get -field=private_key "$VAULT_PATH" 2>/dev/null | ssh-add - 2>/dev/null; then
+# Fetch key from Vault into memory
+KEY_DATA=$(vault kv get -field=private_key "$VAULT_PATH" 2>/dev/null) || {
     echo "Error: Failed to fetch key from Vault path '$VAULT_PATH'"
     echo "Make sure you are logged in: vault login"
     exit 1
-fi
+}
+
+# Load key into ssh-agent via pipe (never touches disk for ssh-agent)
+printf '%s\n' "$KEY_DATA" | ssh-add - 2>/dev/null || {
+    echo "Error: Failed to add key to ssh-agent"
+    exit 1
+}
+
+# Add key to Pageant (PuTTY agent) — key persists in Pageant after vssh exits
+add_to_pageant "$KEY_DATA" || true
+
+# Clear key from shell memory
+unset KEY_DATA
 
 echo "Connecting to $HOST..."
 

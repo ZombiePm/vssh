@@ -6,3 +6,5 @@ id_ed25519
 id_ecdsa
 .env
 .vault-token
+.claude/
+.idea/
